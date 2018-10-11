@@ -1,6 +1,7 @@
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
 from pyspark.sql.types import *
+from pyspark.sql.functions import *
 import csv
 import datetime
 import time
@@ -50,7 +51,18 @@ def create_tuple(il):
 final_gpay = new_gpay.map(split_data).map(create_tuple)
 
 gpay_df = sqlc.createDataFrame(final_gpay, schema)
+print [len(e) for e in gpay_df.rdd.glom().collect()]
 
 st = time.time()
 q1_out = gpay_df.groupBy(gpay_df.Applicable_Manufacturer_or_Applicable_GPO_Making_Payment_Name, gpay_df.Physician_Specialty).agg({'Total_Amount_of_Payment_USDollars': 'sum'}).collect()
-print "time taken: ", time.time() - st
+print "time taken with default partition: ", time.time() - st
+
+fetch_month = udf(lambda s: s.month, IntegerType())
+gpay_df_with_mon = gpay_df.withColumn('Month_for_Partition', fetch_month(gpay_df['Date_of_Payment']))
+
+gpay_df_mon_with_par = gpay_df_with_mon.repartition(12, 'Month_for_Partition')
+print [len(e) for e in gpay_df_mon_with_par.rdd.glom().collect()]
+
+st = time.time()
+q2_out = gpay_df_mon_with_par.groupBy(gpay_df_mon_with_par.Applicable_Manufacturer_or_Applicable_GPO_Making_Payment_Name, gpay_df_mon_with_par.Physician_Specialty).agg({'Total_Amount_of_Payment_USDollars': 'sum'}).collect()
+print "time taken with month partition: ", time.time() - st
