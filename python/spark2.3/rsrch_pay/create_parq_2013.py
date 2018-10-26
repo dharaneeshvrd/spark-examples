@@ -29,11 +29,11 @@ fields[147].dataType = FloatType()
 fields[148].dataType = TimestampType()
 
 schema = StructType(fields)
-
+fields = [4,6,26,46,66,86,106,127,147,148]
 def split_data(istr):
     l = []
     for i, ele in enumerate(csv.reader(istr.split(','))):
-        if not ele and i in [4,6,26,46,66,86,106,127,147,148]:
+        if not ele and i in fields:
             ele = [None]
         elif not ele:
             ele = [str()]
@@ -65,4 +65,4 @@ final_gpay = gpay.map(split_data).map(create_tuple)
 gpay_df = spark.createDataFrame(final_gpay, schema)
 
 # Writing the df as parquet with the default partiton
-gpay_df.write.parquet('/tmp/spark_poc/parq_out_rsrch_2013')
+gpay_df.write.parquet('/tmp/spark_poc/parq_out_rsrch_2013_1')
