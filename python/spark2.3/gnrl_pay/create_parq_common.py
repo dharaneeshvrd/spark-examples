@@ -54,37 +54,45 @@ class CSVtoParquet(object):
         return schema_def
 
     @staticmethod
-    def create_tuple(istr):
+    def split_data(istr):
+        l = []
+        for i, ele in enumerate(csv.reader(istr.split(','))):
+            if not ele and i in int_fields+long_fields+float_fields+datetime_fields:
+                ele = [None]
+            elif not ele:
+                ele = [str()]
+            l += ele
+        return l
+
+    @staticmethod
+    def create_tuple(il):
         jl = ()
-        for i, e in enumerate(csv.reader(istr.split(','))):
-            if i in int_fields+long_fields+float_fields+datetime_fields:
-                if e:
-                    e = e[0]
-                    if i in int_fields:
-                        jl += (int(e.strip('"')),)
-                    elif i in long_fields:
-                        jl += (long(e.strip('"')),)
-                    elif i in float_fields:
-                        jl += (float(e.strip('"')),)
-                    elif i in datetime_fields:
-                        if '-' in e:
-                            tl = e.strip('"').split('-')
-                            jl += (datetime.datetime(int(tl[2]),int(tl[1]),int(tl[0])),)
-                        else:
-                            tl = e.strip('"').split('/')
-                            jl += (datetime.datetime(int(tl[2]),int(tl[0]),int(tl[1])),)
+        possible_yrs = [2013,2014,2015,2016,2017]
+        for i, e in enumerate(il):
+            if i in int_fields and e:
+                jl += (int(e.strip('"')),)
+            elif i in long_fields and e:
+                jl += (long(e.strip('"')),)
+            elif i in float_fields and e:
+                jl += (float(e.strip('"')),)
+            elif i in datetime_fields and e:
+                if '-' in e:
+                    tl = e.strip('"').split('-')
+                    (y, m, d) = (int(tl[2]),int(tl[1]),int(tl[0]))
                 else:
-                    jl += (None,)
-            elif e:
-                jl += (e[0],)
+                    tl = e.strip('"').split('/')
+                    (y, m, d) = (int(tl[2]),int(tl[0]),int(tl[1]))
+                if y not in possible_yrs:
+                    (y,m,d) = (2016,1,1)
+                jl += (datetime.datetime(y,m,d),)
             else:
-                jl += (str(),)
+                jl += (e,)
         return jl
 
     def convert(self):
         rdd = self.sc.textFile(input_dataset_path)
 
-        final_rdd = rdd.map(CSVtoParquet.create_tuple)
+        final_rdd = rdd.map(CSVtoParquet.split_data).map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
@@ -124,12 +132,10 @@ def main():
         csvtoparq = CSVtoParquet(sc, spark, schema_info[schema])
         dataframes.append(csvtoparq.convert())
 
-    final_df = dataframes.pop()
+    df = dataframes.pop()
 
-    for df in dataframes:
-        final_df = union_df(final_df, df)
-
-    final_df.write.mode('overwrite').parquet('/tmp/spark_poc1/default_part')
+    location = '/tmp/spark_poc1/gpay/yr_part'
+    df.write.partitionBy('Program_Year').mode('append').parquet(location)
         
 
 if __name__ == '__main__':
