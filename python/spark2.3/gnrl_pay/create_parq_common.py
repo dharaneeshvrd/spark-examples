@@ -12,7 +12,8 @@ int_fields = list()
 long_fields = list()
 float_fields = list()
 datetime_fields = list()
-input_dataset_path = str()
+input_path = str()
+output_path = str()
 
 class CSVtoParquet(object):
     def __init__(self, sc, spark_session, schema_info):
@@ -24,14 +25,16 @@ class CSVtoParquet(object):
         global long_fields
         global float_fields
         global datetime_fields
-        global input_dataset_path
+        global input_path
+        global output_path
     
         schema = schema_info['schema']
         int_fields = schema_info['int_fields']
         long_fields = schema_info['long_fields']
         float_fields = schema_info['float_fields']
         datetime_fields = schema_info['datetime_fields']
-        input_dataset_path = schema_info['input_dataset_path']
+        input_path = schema_info['input_path']
+        output_path = schema_info['output_path']
 
     def prepare_schema(self):
         headers = schema.split(',')
@@ -54,52 +57,50 @@ class CSVtoParquet(object):
         return schema_def
 
     @staticmethod
-    def split_data(istr):
-        l = []
-        for i, ele in enumerate(csv.reader(istr.split(','))):
-            if not ele and i in int_fields+long_fields+float_fields+datetime_fields:
-                ele = [None]
-            elif not ele:
-                ele = [str()]
-            l += ele
-        return l
-
-    @staticmethod
-    def create_tuple(il):
-        jl = ()
+    def create_tuple(istr):
         possible_yrs = [2013,2014,2015,2016,2017]
-        for i, e in enumerate(il):
-            if i in int_fields and e:
-                jl += (int(e.strip('"')),)
-            elif i in long_fields and e:
-                jl += (long(e.strip('"')),)
-            elif i in float_fields and e:
-                jl += (float(e.strip('"')),)
-            elif i in datetime_fields and e:
-                if '-' in e:
-                    tl = e.strip('"').split('-')
-                    (y, m, d) = (int(tl[2]),int(tl[1]),int(tl[0]))
+        jl = ()
+        for i, e in enumerate(csv.reader(istr.split(','))):
+            if i in int_fields+long_fields+float_fields+datetime_fields:
+                if e:
+                    e = e[0]
+                    if i in int_fields:
+                        jl += (int(e.strip('"')),)
+                    elif i in long_fields:
+                        jl += (long(e.strip('"')),)
+                    elif i in float_fields:
+                        jl += (float(e.strip('"')),)
+                    elif i in datetime_fields:
+                        if '-' in e:
+                            tl = e.strip('"').split('-')
+                            (y, m, d) = (int(tl[2]),int(tl[1]),int(tl[0]))
+                        else:
+                            tl = e.strip('"').split('/')
+                            (y, m, d) = (int(tl[2]),int(tl[0]),int(tl[1]))
+                        if y not in possible_yrs:
+                            (y,m,d) = (2015,1,1)
+                        jl += (datetime.datetime(y,m,d),)
                 else:
-                    tl = e.strip('"').split('/')
-                    (y, m, d) = (int(tl[2]),int(tl[0]),int(tl[1]))
-                if y not in possible_yrs:
-                    (y,m,d) = (2016,1,1)
-                jl += (datetime.datetime(y,m,d),)
+                    jl += (None,)
+            elif e:
+                jl += (e[0],)
             else:
-                jl += (e,)
+                jl += (str(),)
         return jl
 
-    def convert(self):
-        rdd = self.sc.textFile(input_dataset_path)
+    def convert_and_write(self):
+        rdd = self.sc.textFile(input_path)
 
-        final_rdd = rdd.map(CSVtoParquet.split_data).map(CSVtoParquet.create_tuple)
+        final_rdd = rdd.map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
         df = self.spark.createDataFrame(final_rdd, schema_def)
 
-        return df
+        df.write.mode('append').parquet(output_path)
 
+'''
+Not required as of now
 def union_df(df1, df2):
     df1_fields = set((f.name, f.dataType) for f in df1.schema)
     df2_fields = set((f.name, f.dataType) for f in df2.schema)
@@ -113,6 +114,8 @@ def union_df(df1, df2):
     df1 = df1.select(df2.columns)
 
     return df1.union(df2)
+
+'''
 
 def main():
     conf = SparkConf().setAppName('test_med_analysis')
@@ -130,13 +133,7 @@ def main():
 
     for schema in schema_info:
         csvtoparq = CSVtoParquet(sc, spark, schema_info[schema])
-        dataframes.append(csvtoparq.convert())
-
-    df = dataframes.pop()
-
-    location = '/tmp/spark_poc1/gpay/yr_part'
-    df.write.partitionBy('Program_Year').mode('append').parquet(location)
-        
+        csvtoparq.convert_and_write()
 
 if __name__ == '__main__':
     main()
