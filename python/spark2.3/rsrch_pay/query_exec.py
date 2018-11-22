@@ -31,4 +31,4 @@ grouping_cols = ['Teaching_Hospital_Name',
 
 q1_result = rpay_df.groupBy(grouping_cols) \
                    .agg({'Total_Amount_of_Payment_USDollars': 'sum'}) \
-                   .repartition(1).write.mode('overwrite').json('/tmp/spark_poc1/rpay/query_out')
+                   .coalesce(1).write.mode('overwrite').json('/tmp/spark_poc1/query_out/rpay/q1_out')

@@ -91,16 +91,17 @@ class CSVtoParquet(object):
     def convert_and_write(self):
         rdd = self.sc.textFile(input_path)
 
+        # print 'RDD textfile partition count', rdd.getNumPartitions()
         final_rdd = rdd.map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
         df = self.spark.createDataFrame(final_rdd, schema_def)
+        # print 'df partition count', df.rdd.getNumPartitions()
 
-        df.write.mode('append').parquet(output_path)
+        df.repartition(4).write.mode('overwrite').partitionBy('Program_Year').parquet(output_path)
+        #return df
 
-'''
-Not required as of now
 def union_df(df1, df2):
     df1_fields = set((f.name, f.dataType) for f in df1.schema)
     df2_fields = set((f.name, f.dataType) for f in df2.schema)
@@ -114,8 +115,6 @@ def union_df(df1, df2):
     df1 = df1.select(df2.columns)
 
     return df1.union(df2)
-
-'''
 
 def main():
     conf = SparkConf().setAppName('test_med_analysis')
@@ -133,7 +132,16 @@ def main():
 
     for schema in schema_info:
         csvtoparq = CSVtoParquet(sc, spark, schema_info[schema])
-        csvtoparq.convert_and_write()
+        dataframes.append(csvtoparq.convert_and_write())
+
+    """
+    df1 = dataframes.pop()
+
+    for df in dataframes:
+        df1 = union_df(df1, df)
+
+    df1.repartition('Program_Year', 5).write.paritionBy('Program_Year').parquet('/tmp/spark_poc1/gpay/total_data')
+    """
 
 if __name__ == '__main__':
     main()
