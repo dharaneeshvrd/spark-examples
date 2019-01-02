@@ -14,6 +14,9 @@ float_fields = list()
 datetime_fields = list()
 input_path = str()
 output_path = str()
+partition_type = str()
+partition_count = str()
+is_header_removed = bool()
 
 class CSVtoParquet(object):
     def __init__(self, sc, spark_session, schema_info):
@@ -27,6 +30,9 @@ class CSVtoParquet(object):
         global datetime_fields
         global input_path
         global output_path
+        global partition_type
+        global partition_count
+        global is_header_removed
     
         schema = schema_info['schema']
         int_fields = schema_info['int_fields']
@@ -35,6 +41,9 @@ class CSVtoParquet(object):
         datetime_fields = schema_info['datetime_fields']
         input_path = schema_info['input_path']
         output_path = schema_info['output_path']
+        partition_type = schema_info['partition']['type']
+        partition_count = schema_info['partition']['count']
+        is_header_removed = schema_info['is_header_removed']
 
     def prepare_schema(self):
         headers = schema.split(',')
@@ -91,16 +100,29 @@ class CSVtoParquet(object):
     def convert_and_write(self):
         rdd = self.sc.textFile(input_path)
 
-        # print 'RDD textfile partition count', rdd.getNumPartitions()
-        final_rdd = rdd.map(CSVtoParquet.create_tuple)
+        if not is_header_removed:
+            header_rdd = rdd.filter(lambda x: 'Change_Type' in x)
+            new_rdd = rdd.subtract(header_rdd) # Very costly opertaion
+
+        if is_header_removed:
+            final_rdd = rdd.map(CSVtoParquet.create_tuple)
+        else:
+            final_rdd = new_rdd.map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
         df = self.spark.createDataFrame(final_rdd, schema_def)
-        # print 'df partition count', df.rdd.getNumPartitions()
 
-        df.repartition(4).write.mode('overwrite').partitionBy('Program_Year').parquet(output_path)
-        #return df
+        if partition_type == 'default':
+            if partition_count: 
+                df.coalesce(partition_count).write.mode('append').parquet(output_path)
+            else:
+                df.write.mode('append').parquet(output_path)
+        else:
+            if partition_count:
+                df.coalesce(partition_count).write.mode('append').partitionBy('Program_Year').parquet(output_path)
+            else:
+                df.write.mode('append').partitionBy('Program_Year').parquet(output_path)
 
 def union_df(df1, df2):
     df1_fields = set((f.name, f.dataType) for f in df1.schema)
@@ -133,15 +155,6 @@ def main():
     for schema in schema_info:
         csvtoparq = CSVtoParquet(sc, spark, schema_info[schema])
         dataframes.append(csvtoparq.convert_and_write())
-
-    """
-    df1 = dataframes.pop()
-
-    for df in dataframes:
-        df1 = union_df(df1, df)
-
-    df1.repartition('Program_Year', 5).write.paritionBy('Program_Year').parquet('/tmp/spark_poc1/gpay/total_data')
-    """
 
 if __name__ == '__main__':
     main()

@@ -12,7 +12,11 @@ int_fields = list()
 long_fields = list()
 float_fields = list()
 datetime_fields = list()
-input_dataset_path = str()
+input_path = str()
+output_path = str()
+partition_type = str()
+partition_count = str()
+is_header_removed = bool()
 
 class CSVtoParquet(object):
     def __init__(self, sc, spark_session, schema_info):
@@ -24,14 +28,22 @@ class CSVtoParquet(object):
         global long_fields
         global float_fields
         global datetime_fields
-        global input_dataset_path
+        global input_path
+        global output_path
+        global partition_type
+        global partition_count
+        global is_header_removed
     
         schema = schema_info['schema']
         int_fields = schema_info['int_fields']
         long_fields = schema_info['long_fields']
         float_fields = schema_info['float_fields']
         datetime_fields = schema_info['datetime_fields']
-        input_dataset_path = schema_info['input_dataset_path']
+        input_path = schema_info['input_path']
+        output_path = schema_info['output_path']
+        partition_type = schema_info['partition']['type']
+        partition_count = schema_info['partition']['count']
+        is_header_removed = schema_info['is_header_removed']
 
     def prepare_schema(self):
         headers = schema.split(',')
@@ -55,6 +67,7 @@ class CSVtoParquet(object):
 
     @staticmethod
     def create_tuple(istr):
+        possible_yrs = [2013,2014,2015,2016,2017]
         jl = ()
         for i, e in enumerate(csv.reader(istr.split(','))):
             if i in int_fields+long_fields+float_fields+datetime_fields:
@@ -69,10 +82,13 @@ class CSVtoParquet(object):
                     elif i in datetime_fields:
                         if '-' in e:
                             tl = e.strip('"').split('-')
-                            jl += (datetime.datetime(int(tl[2]),int(tl[1]),int(tl[0])),)
+                            (y, m, d) = (int(tl[2]),int(tl[1]),int(tl[0]))
                         else:
                             tl = e.strip('"').split('/')
-                            jl += (datetime.datetime(int(tl[2]),int(tl[0]),int(tl[1])),)
+                            (y, m, d) = (int(tl[2]),int(tl[0]),int(tl[1]))
+                        if y not in possible_yrs:
+                            (y,m,d) = (2015,1,1)
+                        jl += (datetime.datetime(y,m,d),)
                 else:
                     jl += (None,)
             elif e:
@@ -81,16 +97,32 @@ class CSVtoParquet(object):
                 jl += (str(),)
         return jl
 
-    def convert(self):
-        rdd = self.sc.textFile(input_dataset_path)
+    def convert_and_write(self):
+        rdd = self.sc.textFile(input_path)
 
-        final_rdd = rdd.map(CSVtoParquet.create_tuple)
+        if not is_header_removed:
+            header_rdd = rdd.filter(lambda x: 'Change_Type' in x)
+            new_rdd = rdd.subtract(header_rdd) # Very costly opertaion
+
+        if is_header_removed:
+            final_rdd = rdd.map(CSVtoParquet.create_tuple)
+        else:
+            final_rdd = new_rdd.map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
         df = self.spark.createDataFrame(final_rdd, schema_def)
 
-        return df
+        if partition_type == 'default':
+            if partition_count: 
+                df.coalesce(partition_count).write.mode('append').parquet(output_path)
+            else:
+                df.write.mode('append').parquet(output_path)
+        else:
+            if partition_count:
+                df.coalesce(partition_count).write.mode('append').partitionBy('Program_Year').parquet(output_path)
+            else:
+                df.write.mode('append').partitionBy('Program_Year').parquet(output_path)
 
 def union_df(df1, df2):
     df1_fields = set((f.name, f.dataType) for f in df1.schema)
@@ -122,15 +154,7 @@ def main():
 
     for schema in schema_info:
         csvtoparq = CSVtoParquet(sc, spark, schema_info[schema])
-        dataframes.append(csvtoparq.convert())
-
-    final_df = dataframes.pop()
-
-    for df in dataframes:
-        final_df = union_df(final_df, df)
-
-    final_df.write.mode('overwrite').parquet('/tmp/spark_poc1/default_part')
-        
+        dataframes.append(csvtoparq.convert_and_write())
 
 if __name__ == '__main__':
     main()

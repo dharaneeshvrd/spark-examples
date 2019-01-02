@@ -34,9 +34,7 @@ def union_df(df1, df2):
     return df1.union(df2)
 
 gpay_df = union_df(df1, df2)
-gpay_df.write.mode('overwrite').partitionBy('Program_Year').parquet('/tmp/spark_poc1/gpay/total_data_yr_part')
 
-"""
 # 1st query execution and writting the result
 q1_out = gpay_df.select('Physician_Specialty', 'Recipient_State', 'Total_Amount_of_Payment_USDollars').groupBy('Physician_Specialty', 'Recipient_State').agg({'Total_Amount_of_Payment_USDollars': 'sum'}).withColumnRenamed('sum(Total_Amount_of_Payment_USDollars)', 'Total_funding').orderBy('Total_funding', ascending=False).limit(20).coalesce(1).write.mode('overwrite').json('/tmp/spark_poc1/gpat/q1_out')
 
@@ -45,4 +43,3 @@ q2_out = gpay_df.select(gpay_df.Applicable_Manufacturer_or_Applicable_GPO_Making
 
 # 3rd query execution and writting the result
 q3_out = gpay_df.select('Applicable_Manufacturer_or_Applicable_GPO_Making_Payment_Name', 'Teaching_Hospital_Name', 'Program_Year', 'Total_Amount_of_Payment_USDollars').groupBy('Applicable_Manufacturer_or_Applicable_GPO_Making_Payment_Name', 'Teaching_Hospital_Name', 'Program_Year').agg({'Total_Amount_of_Payment_USDollars': 'sum'}).withColumnRenamed('sum(Total_Amount_of_Payment_USDollars)', 'Total_funding_in_dollars').coalesce(1).write.mode('overwrite').json('/tmp/spark_poc1/gpat/q3_out')
-"""

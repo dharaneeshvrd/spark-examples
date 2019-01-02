@@ -20,7 +20,7 @@ spark = SparkSession \
     .appName("RPAY_DS_QUERIES") \
     .getOrCreate()
 
-rpay_df = spark.read.parquet('/tmp/spark_poc1/rpay/yr_part')
+rpay_df = spark.read.parquet('/tmp/spark_poc1/out/rpay')
 
 grouping_cols = ['Teaching_Hospital_Name',
                  'Principal_Investigator_1_Specialty',
