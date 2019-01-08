@@ -100,14 +100,10 @@ class CSVtoParquet(object):
     def convert_and_write(self):
         rdd = self.sc.textFile(input_path)
 
-        if not is_header_removed:
-            header_rdd = rdd.filter(lambda x: 'Change_Type' in x)
-            new_rdd = rdd.subtract(header_rdd) # Very costly opertaion
-
         if is_header_removed:
             final_rdd = rdd.map(CSVtoParquet.create_tuple)
         else:
-            final_rdd = new_rdd.map(CSVtoParquet.create_tuple)
+            final_rdd = rdd.filter(lambda x: 'Change_Type' not in x).map(CSVtoParquet.create_tuple)
         
         schema_def = self.prepare_schema()
 
