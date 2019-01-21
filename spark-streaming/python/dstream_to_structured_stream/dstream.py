@@ -81,8 +81,7 @@ def main():
     schema = StructType(fields)
 
     # Define the read stream
-    #DStream = KafkaUtils.createDirectStream(ssc, [topic_to_read], {"metadata.broker.list": bootstrap_servers})
-    DStream = ssc.textFileStream(input_file)
+    DStream = KafkaUtils.createDirectStream(ssc, [topic_to_read], {"metadata.broker.list": bootstrap_servers})
 
     # Apply write on rdd's after structuring them
     DStream.foreachRDD(writeInDf)
