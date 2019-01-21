@@ -10,15 +10,16 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
 if len(sys.argv) != 6:
-    print "Usage Guide: spark-submit <spark-args> dstream.py <bootstrap_servers> <topic_to_read> <topic_to_write> <schema_file> <input_file>"
+    print "Usage Guide: spark-submit <spark-args> dstream.py <bootstrap_servers> <topic_to_read> <topic_to_write> <schema_file>"
     exit()
 
 bootstrap_servers = sys.argv[1]
 topic_to_read = sys.argv[2]
 topic_to_write = sys.argv[3]
 schema_file = sys.argv[4]
-input_file = sys.argv[5]
+
 schema_str = open(schema_file, 'r').read().strip('\n')
+
 float_fields = [157]
 datetime_fields = [158]
 
