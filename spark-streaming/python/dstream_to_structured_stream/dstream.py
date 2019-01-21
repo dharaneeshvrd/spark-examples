@@ -10,7 +10,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
 if len(sys.argv) != 6:
-    print "Usage Guide: python dstream.py <bootstrap_servers> <topic_to_read> <topic_to_write> <schema_file> <input_file>"
+    print "Usage Guide: spark-submit <spark-args> dstream.py <bootstrap_servers> <topic_to_read> <topic_to_write> <schema_file> <input_file>"
     exit()
 
 bootstrap_servers = sys.argv[1]
