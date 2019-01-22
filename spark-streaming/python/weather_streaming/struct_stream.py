@@ -16,6 +16,7 @@ checkpoint_directory = sys.argv[4]
 def main():
     # Creating the spark session
     spark = SparkSession.builder.appName('Kafka spark structured stream').getOrCreate()
+    spark.conf.set("spark.sql.session.timeZone", "Asia/Kolkata")
 
     # Creating kafka structured stream
     df = spark.readStream \
@@ -48,10 +49,14 @@ def main():
     df5 = df4.withWatermark("timestamp", "10 minutes") \
              .groupBy(window('timestamp', '1 hour'), 'location', 'year', 'month', 'day') \
              .mean('temp_c') \
-             .withColumnRenamed('avg(temp_c)', 'AverageTemperature')
+             .withColumnRenamed('avg(temp_c)', 'AverageTemperatureInCelsius')
+
+    df6 = df5.select('location', 'year', 'month', 'day', df5.window['start'], df5.window['end'], 'AverageTemperatureInCelsius') \
+             .withColumnRenamed('window.start', 'start_time') \
+             .withColumnRenamed('window.end', 'end_time')
 
     # Writing to hdfs with time partition
-    df5.writeStream \
+    df6.writeStream \
        .outputMode("append") \
        .format("json") \
        .partitionBy("year", "month", "day") \
