@@ -1,0 +1,9 @@
+{
+  "bootstrap_server" : "10.81.1.158:9092",
+  "topic" : "weather",
+  "app_id": "xyz app id",
+  "consumer_key": "xyz consumer key",
+  "consumer_secret": "xyz consumer secret key",
+  "location": "Bangalore",
+  "unit": "c"
+}

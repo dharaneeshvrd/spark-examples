@@ -4,52 +4,45 @@ import sys
 from collections import OrderedDict
 from kafka import KafkaProducer
 
-from apixu.client import ApixuClient, ApixuException
+from yahoo_weather import YahooWeather
 
-if len(sys.argv) != 5:
-    print "Usage Guide: python writetokafka.py <bootstrapServers> <topic> <place> <api_key>"
-    exit()
-
-bootstrapServers = sys.argv[1]
-topic = sys.argv[2]
-place = sys.argv[3]
-api_key = sys.argv[4]
 
 class streamToKafka(object):
 
-    def __init__(self):
+    def __init__(self, bootstrap_server, topic):
+        self.topic = topic
         self.producer = None
 
         try:
-            self.producer = KafkaProducer(bootstrap_servers=[bootstrapServers])
+            self.producer = KafkaProducer(bootstrap_servers=[bootstrap_server])
         except Exception as ex:
             print ex
 
-    def publish_message(self, topic, value):
-        producer = self.producer.send(topic, value)
+    def publish_message(self, value):
+        producer = self.producer.send(self.topic, value)
 
         while not producer.is_done:
             continue
         print value
 
 def main():
-    kafka = streamToKafka()
+    config = None
 
-    client = ApixuClient(api_key)
+    with open("config.json") as f:
+        config = json.load(f) 
+
+    kafka = streamToKafka(config['bootstrap_server'], config['topic'])
+    weather_client = YahooWeather(config['app_id'], config['consumer_key'], config['consumer_secret'], config['location'], config['unit'])
 
     while True:
-        try:
-            current = client.getCurrentWeather(q=place)
+        current = weather_client.get_current_weather()
 
-            to_write = OrderedDict()
-            to_write['location'] = current['location']['name']
-            to_write['temp_c'] = current['current']['temp_c']
-            to_write['timestamp_s'] = current['location']['localtime_epoch']
+        to_write = OrderedDict()
+        to_write['location'] = config['location']
+        to_write['temp_c'] = current['current_observation']['condition']['temperature']
+        to_write['timestamp_s'] = str(int(time.time()))
 
-            kafka.publish_message(topic, json.dumps(to_write))
-        except ApixuException as e:
-            print "ERROR: ", e
-
+        kafka.publish_message(json.dumps(to_write))
         time.sleep(60)
 
 if __name__ == '__main__':
